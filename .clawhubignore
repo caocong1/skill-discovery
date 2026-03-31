@@ -3,6 +3,7 @@ node_modules/
 coverage/
 test/
 examples/
+skills/
 .omc/
 *.log
 .DS_Store
