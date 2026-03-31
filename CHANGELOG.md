@@ -2,6 +2,13 @@
 
 本项目的所有重要变更都会记录在此文件中。
 
+## [2.1.1] - 2026-03-31
+
+### 修复
+
+- 新增 `.clawhubignore` 排除 `package-lock.json` 等非必要文件，消除 ClawHub 安全扫描的 `install_untrusted_source` 标记
+- SKILL.md 声明 `requires.bins` (`npx`) 和 `anyBins` (`clawhub`)，消除 LLM 扫描的元数据不一致警告
+
 ## [2.1.0] - 2026-03-31
 
 ### 新增

@@ -1,6 +1,14 @@
 ---
 name: skill-discovery
 description: 基于用户意图自动发现并安装 skill。分析用户输入，搜索匹配 skill，验证质量后自动安装最佳匹配。
+metadata:
+  openclaw:
+    requires:
+      bins:
+        - npx
+      anyBins:
+        - clawhub
+    homepage: https://github.com/caocong1/skill-discovery
 ---
 
 # Skill Discovery
