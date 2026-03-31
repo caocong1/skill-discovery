@@ -1,0 +1,5 @@
+node_modules/
+coverage/
+.omc/
+*.log
+.DS_Store

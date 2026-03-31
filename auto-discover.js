@@ -1,48 +1,14 @@
 #!/usr/bin/env node
 /**
  * Auto Discover - 自动发现与安装
- * 
+ *
  * Phase 2: 自动化（A+B）
  * A. 自动发现需求
  * B. 自动执行流程
  */
 
 const { skillsList, skillsFind, skillsAdd } = require('./skills-cli');
-
-// ==================== 常量（消除魔法数字）====================
-const MAGIC = {
-  CONFIDENCE_THRESHOLD: 0.6,
-  MIN_INSTALLS: 1000,
-  CACHE_TTL_MS: 10 * 60 * 1000,       // 10 分钟
-  CACHE_MAX_SIZE: 100,                 // 搜索缓存上限
-  QUERY_MAX_LENGTH: 50,                // 查询最大长度
-  WEIGHT_EXPLICIT: 1.0,
-  WEIGHT_HIGH: 0.9,
-  WEIGHT_MEDIUM_HIGH: 0.85,
-  WEIGHT_MEDIUM: 0.8,
-  WEIGHT_DOMAIN: 0.7,
-  NEGATIVE_MULTIPLIER: 0.5,
-  DOMAIN_MIN_CONFIDENCE: 0.8,
-  INSTALLS_SCORE_FACTOR: 10,
-  INSTALLS_SCORE_MAX: 40,
-  TRUSTED_SCORE: 30,
-  UNTRUSTED_SCORE: 10,
-  HIGH_RISK_MULTIPLIER: 0.3,
-  MEDIUM_RISK_MULTIPLIER: 0.7,
-  MIN_INSTALLS_SCALE: 10000,
-  // 日志统一 Schema
-  LOG_VERSION: '1.0',
-  // 重试相关
-  MAX_RETRIES: 3,
-  RETRY_DELAY_MS: 1000,
-  // cleanTrash 相关
-  TRASH_CLEAN_DAYS: 7,
-  TRASH_CLEAN_INTERVAL_MS: 60 * 60 * 1000,  // 1 小时
-  // 脱敏相关
-  SANITIZE_MAX_DEPTH: 10,
-  // 缓存清理阈值
-  CACHE_CLEANUP_THRESHOLD: 100
-};
+const { MAGIC, ERROR_CODES, LOG_SCHEMA, DISCOVER_CONFIG } = require('./constants');
 
 // ==================== 预编译正则（避免重复编译）====================
 const RE = {
@@ -100,7 +66,10 @@ const RE = {
     // 英文领域关键词（网络/API、数据库、AI/ML、安全、移动端、游戏）
     { re: /api|rest|graphql|endpoint|http/i, domain: 'network-api' },
     { re: /database|db|sql|mongodb|postgresql|mysql|redis/i, domain: 'database' },
-    { re: /ai|ml|machine learning|nlp|gpt|llm|chatgpt|openai|deep learning|tensorflow|pytorch/i, domain: 'ai-ml' },
+    {
+      re: /ai|ml|machine learning|nlp|gpt|llm|chatgpt|openai|deep learning|tensorflow|pytorch/i,
+      domain: 'ai-ml'
+    },
     { re: /security|secure|crypto|encrypt|auth|authentication|authorization/i, domain: 'security' },
     { re: /mobile|ios|android|react native|flutter|swift|kotlin/i, domain: 'mobile' },
     { re: /game|unity|unreal|godot|game dev|2d|3d/i, domain: 'gaming' }
@@ -120,7 +89,10 @@ const RE = {
     // 中文领域关键词（网络/API、数据库、AI/ML、安全、移动端、游戏）
     { re: /api|接口|rest|graphql|网络请求|http/i, domain: 'network-api' },
     { re: /数据库|db|sql|mongodb|postgresql|mysql|redis/i, domain: 'database' },
-    { re: /人工智能|ai|机器学习|nlp|gpt|llm|chatgpt|深度学习|tensorflow|pytorch/i, domain: 'ai-ml' },
+    {
+      re: /人工智能|ai|机器学习|nlp|gpt|llm|chatgpt|深度学习|tensorflow|pytorch/i,
+      domain: 'ai-ml'
+    },
     { re: /安全|加密|解密|认证|授权|权限/i, domain: 'security' },
     { re: /移动端|ios|android|react native|flutter|swift|kotlin|手机端/i, domain: 'mobile' },
     { re: /游戏|unity|unreal|godot|游戏开发|2d|3d/i, domain: 'gaming' }
@@ -144,29 +116,21 @@ const RE = {
     /^什么时候/i,
     /^谁/i,
     /^哪里/i,
-    /^(是|有).*吗$/i,                   // "是xxx吗？"纯询问
-    /天气|时间|日期|新闻/i,             // 纯信息查询
-    /错误|bug|修复|问题|报错/i,          // 调试问题
+    /^(是|有).*吗$/i, // "是xxx吗？"纯询问
+    /天气|时间|日期|新闻/i, // 纯信息查询
+    /错误|bug|修复|问题|报错/i, // 调试问题
     /(?:^|有)什么(?:问题|bug|错|报错)/i, // "有什么问题"纯询问
-    /(?:咋样|怎么样)$/i                 // 精确匹配 "怎么样" 或 "咋样" 结尾（避免误杀"怎么样才能..."）
+    /(?:咋样|怎么样)$/i // 精确匹配 "怎么样" 或 "咋样" 结尾（避免误杀"怎么样才能..."）
   ]
 };
 
 // ==================== 配置 ====================
 const CONFIG = {
-  confidenceThreshold: MAGIC.CONFIDENCE_THRESHOLD,
-  minInstalls: MAGIC.MIN_INSTALLS,
-  trustedOwners: [
-    'vercel-labs',
-    'anthropics',
-    'google-labs-code',
-    'microsoft',
-    'openai'
-  ],
+  ...DISCOVER_CONFIG,
   cache: {
     findResults: new Map(),
-    ttl: MAGIC.CACHE_TTL_MS,
-    maxSize: MAGIC.CACHE_MAX_SIZE
+    ttl: DISCOVER_CONFIG.cache.ttl,
+    maxSize: DISCOVER_CONFIG.cache.maxSize
   }
 };
 
@@ -175,7 +139,7 @@ const CONFIG = {
 /**
  * 分析用户输入，判断是否需要搜索 skill
  * 基于官方 find-skills 的触发条件
- * 
+ *
  * 修复：负面模式采用行首锚定（^）避免误杀
  * "怎么样才能..."中的"怎么样"不是行首，不会被^什么匹配
  */
@@ -245,7 +209,7 @@ function analyzeNeed(userInput) {
 function validateSkill(skill) {
   const reasons = [];
   let riskLevel = 'low';
-  
+
   // 1. 安装量检查
   if (skill.installs < CONFIG.minInstalls) {
     reasons.push(`安装量过低 (${skill.installs} < ${CONFIG.minInstalls})`);
@@ -253,7 +217,7 @@ function validateSkill(skill) {
   } else {
     reasons.push(`✓ 安装量充足 (${skill.installs.toLocaleString()})`);
   }
-  
+
   // 2. 来源可信度
   const isTrusted = CONFIG.trustedOwners.includes(skill.owner);
   if (isTrusted) {
@@ -262,13 +226,13 @@ function validateSkill(skill) {
     reasons.push(`⚠ 非官方来源 (${skill.owner})`);
     if (riskLevel === 'low') riskLevel = 'medium';
   }
-  
+
   // 3. 格式检查
   if (!skill.fullName.includes('@')) {
     reasons.push('✗ 格式异常');
     riskLevel = 'high';
   }
-  
+
   return {
     passed: riskLevel !== 'high' && skill.installs >= CONFIG.minInstalls,
     riskLevel,
@@ -282,7 +246,7 @@ function validateSkill(skill) {
  */
 function selectBest(skills) {
   // 评分算法
-  const scored = skills.map(skill => {
+  const scored = skills.map((skill) => {
     const validation = validateSkill(skill);
     let score = 0;
 
@@ -375,12 +339,7 @@ async function skillsFindCached(query) {
   return results;
 }
 
-// ==================== 日志统一 Schema ====================
-const LOG_SCHEMA = {
-  VERSION: '1.0',
-  ACTIONS: ['discover', 'install', 'remove', 'error', 'cache_hit', 'cache_miss'],
-  REQUIRED_FIELDS: ['timestamp', 'action', 'input']
-};
+// LOG_SCHEMA 从 constants.js 导入
 
 /**
  * 统一日志格式（供外部 logDiscovery 调用）
@@ -400,56 +359,59 @@ function buildLogEntry(action, data) {
   };
 }
 
-// ==================== 脱敏工具（供 openclaw-hook 使用）====================
+// ==================== 脱敏工具 ====================
 
-/** 敏感字段白名单（脱敏时这些字段值不显示）*/
-const SANITIZE_SAFE_FIELDS = [
-  'skillRef', 'skill', 'fullName', 'owner', 'repo',
-  'installs', 'confidence', 'query', 'domain',
-  'riskLevel', 'reasons', 'success', 'result'
+/** 字段名匹配这些模式时，值会被遮蔽 */
+const SANITIZE_REDACT_KEY_PATTERNS = [
+  /\btoken\b/i,
+  /\bsecret\b/i,
+  /\bpassword\b/i,
+  /\bapi[_-]?key\b/i,
+  /\bcredential\b/i,
+  /\bauthorization\b/i
 ];
 
-/** 匹配敏感值的正则模式 */
-const SANITIZE_VALUE_PATTERNS = [
-  /\btoken\b/i, /\bsecret\b/i, /\bpassword\b/i, /\bauth\b/i,
-  /\bapi[_-]?key\b/i, /\bbearer\b/i, /\bcredential\b/i,
-  /\bBearer\s+[\w.-]+/i, /\bsk-[\w.-]+/i, /ghp_[\w]+/i,
-  /===+.*===+/i  // OAUTH 授权页特征
+/** 字符串值匹配这些模式时，整个值会被遮蔽 */
+const SANITIZE_REDACT_VALUE_PATTERNS = [
+  /\bBearer\s+[\w.-]+/i,
+  /\bsk-[\w.-]+/,
+  /ghp_[\w]+/,
+  /===+\s*[A-Za-z]+\s*===+/ // OAUTH 授权页特征（精确匹配）
 ];
 
 /**
  * 递归脱敏对象中的敏感信息（用于日志记录）
- * @param {*} obj - 任意对象
- * @param {number} depth - 递归深度，防止循环引用
- * @returns {*} 脱敏后的对象
+ *
+ * 策略：只遮蔽真正敏感的字段（token/password/apiKey 等），
+ * 业务字段（installs/confidence/domain/success 等）保留原值以保证日志可用性。
  */
 function sanitize(obj, depth = 0) {
   if (depth > MAGIC.SANITIZE_MAX_DEPTH) return '[MAX_DEPTH]';
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== 'object') {
     if (typeof obj === 'string') {
-      for (const p of SANITIZE_VALUE_PATTERNS) {
+      for (const p of SANITIZE_REDACT_VALUE_PATTERNS) {
         if (p.test(obj)) return '***';
       }
     }
     return obj;
   }
   if (Array.isArray(obj)) {
-    return obj.map(item => sanitize(item, depth + 1));
+    return obj.map((item) => sanitize(item, depth + 1));
   }
 
   const result = {};
   for (const [key, value] of Object.entries(obj)) {
-    // 检查字段名是否在白名单
-    let isSensitiveField = SANITIZE_SAFE_FIELDS.includes(key);
-    // 检查字段名是否匹配敏感模式
-    if (!isSensitiveField) {
-      for (const p of SANITIZE_VALUE_PATTERNS) {
-        if (p.test(key)) { isSensitiveField = true; break; }
+    // 字段名匹配敏感模式 → 遮蔽值
+    let isSensitiveKey = false;
+    for (const p of SANITIZE_REDACT_KEY_PATTERNS) {
+      if (p.test(key)) {
+        isSensitiveKey = true;
+        break;
       }
     }
 
-    if (isSensitiveField) {
+    if (isSensitiveKey) {
       result[key] = '***';
     } else {
       result[key] = sanitize(value, depth + 1);
@@ -458,146 +420,223 @@ function sanitize(obj, depth = 0) {
   return result;
 }
 
-// ==================== 主流程 ====================
+// ==================== 管道函数 ====================
 
 /**
- * 主流程：自动发现与安装
+ * 搜索 skill（带缓存 + 错误分类）
  */
-async function autoDiscover(userInput, options = {}) {
-  // 参数校验
-  const validationErrors = validateParams(userInput, options);
-  if (validationErrors.length > 0) {
-    throw new Error(`参数校验失败: ${validationErrors.join('; ')}`);
-  }
+async function searchSkills(query) {
+  console.log(`💡 搜索: "${query}"`);
 
-  const { dryRun = false } = options;
-  
-  console.log(`🔍 分析: "${userInput.substring(0, 50)}..."`);
-  
-  // 1. 分析需求
-  const need = analyzeNeed(userInput);
-  console.log(`📊 置信度: ${Math.round(need.confidence * 100)}%`);
-  
-  if (!need.shouldSearch) {
-    return {
-      success: false,
-      reason: 'confidence_too_low',
-      confidence: need.confidence,
-      message: '置信度不足，跳过自动发现'
-    };
-  }
-  
-  console.log(`💡 搜索: "${need.query}"`);
-  
-  // 2. 搜索（带缓存）
   let results;
   try {
-    results = await skillsFindCached(need.query);
+    results = await skillsFindCached(query);
   } catch (error) {
+    const errorCode =
+      error.message.includes('not found') || error.message.includes('ENOENT')
+        ? ERROR_CODES.CLI_NOT_FOUND
+        : error.message.includes('ETIMEDOUT') || error.message.includes('network')
+          ? ERROR_CODES.NETWORK_ERROR
+          : ERROR_CODES.SEARCH_FAILED;
+
     return {
       success: false,
+      stage: 'search',
+      outcome: 'failed',
       reason: 'search_failed',
+      errorCode,
       error: error.message,
+      skill: null,
+      candidates: [],
       message: '搜索失败，请稍后重试'
     };
   }
-  
+
   console.log(`📋 找到 ${results.length} 个结果`);
-  
+
   if (results.length === 0) {
     return {
       success: false,
+      stage: 'search',
+      outcome: 'failed',
       reason: 'no_results',
+      errorCode: ERROR_CODES.NO_RESULTS,
+      skill: null,
+      candidates: [],
       message: '未找到相关 skill'
     };
   }
-  
-  // 3. 验证质量
-  const validResults = results.filter(s => validateSkill(s).passed);
+
+  return { success: true, results };
+}
+
+/**
+ * 筛选并选择最佳 skill
+ */
+function filterAndSelect(results) {
+  const validResults = results.filter((s) => validateSkill(s).passed);
   console.log(`✅ 通过验证: ${validResults.length} 个`);
-  
+
   if (validResults.length === 0) {
     return {
       success: false,
+      stage: 'select',
+      outcome: 'failed',
       reason: 'no_valid_results',
+      errorCode: ERROR_CODES.NO_VALID_RESULTS,
+      skill: null,
       candidates: results.slice(0, 3),
       message: '未找到符合质量标准的 skill'
     };
   }
-  
-  // 4. 选择最佳
+
   const best = selectBest(validResults);
   console.log(`⭐ 最佳: ${best.skill.fullName} (评分: ${Math.round(best.score)})`);
-  
-  // 5. 检查是否已安装
+
+  return { success: true, best };
+}
+
+/**
+ * 决定安装并执行
+ */
+async function resolveInstall(best, dryRun) {
+  // 检查是否已安装
   try {
     const installed = await skillsList({ global: true });
-    const isInstalled = installed.some(s => 
-      s.name === best.skill.skill || 
-      s.name === best.skill.fullName.replace(/[@/]/g, '-')
+    const isInstalled = installed.some(
+      (s) => s.name === best.skill.skill || s.name === best.skill.fullName.replace(/[@/]/g, '-')
     );
-    
+
     if (isInstalled) {
       return {
         success: true,
+        stage: 'install',
+        outcome: 'already_installed',
+        reason: null,
+        errorCode: null,
         alreadyInstalled: true,
         skill: best.skill,
+        candidates: [],
         message: `✅ ${best.skill.fullName} 已安装`
       };
     }
-  } catch (e) {
+  } catch (_e) {
     // 忽略检查错误，继续安装
   }
-  
-  // 6. 安装（或模拟）
+
   if (dryRun) {
     return {
       success: true,
+      stage: 'install',
+      outcome: 'dry_run',
+      reason: null,
+      errorCode: null,
       dryRun: true,
       skill: best.skill,
       validation: best.validation,
+      candidates: [],
       message: `[模拟] 将安装 ${best.skill.fullName}`
     };
   }
-  
+
   console.log(`📦 安装: ${best.skill.fullName}`);
   try {
     const installResult = await skillsAdd(best.skill.fullName, {
       global: true,
       yes: true
     });
-    
+
     return {
       success: true,
+      stage: 'install',
+      outcome: 'installed',
+      reason: null,
+      errorCode: null,
       installed: true,
       skill: best.skill,
       validation: best.validation,
       result: installResult,
+      candidates: [],
       message: `✅ 已自动安装 ${best.skill.fullName}`
     };
   } catch (error) {
     return {
       success: false,
+      stage: 'install',
+      outcome: 'failed',
       reason: 'install_failed',
+      errorCode: ERROR_CODES.INSTALL_FAILED,
       skill: best.skill,
       error: error.message,
       fallback: `手动安装: npx skills add ${best.skill.fullName}`,
+      candidates: [],
       message: `安装失败: ${error.message}`
     };
   }
 }
 
+// ==================== 主流程（编排） ====================
+
+/**
+ * 主流程：自动发现与安装
+ *
+ * 编排 analyzeNeed → searchSkills → filterAndSelect → resolveInstall
+ */
+async function autoDiscover(userInput, options = {}) {
+  const validationErrors = validateParams(userInput, options);
+  if (validationErrors.length > 0) {
+    throw new Error(`参数校验失败: ${validationErrors.join('; ')}`);
+  }
+
+  const { dryRun = false } = options;
+
+  console.log(`🔍 分析: "${userInput.substring(0, 50)}..."`);
+
+  // 1. 分析需求
+  const need = analyzeNeed(userInput);
+  console.log(`📊 置信度: ${Math.round(need.confidence * 100)}%`);
+
+  if (!need.shouldSearch) {
+    return {
+      success: false,
+      stage: 'analyze',
+      outcome: 'skipped',
+      reason: 'confidence_too_low',
+      errorCode: ERROR_CODES.CONFIDENCE_TOO_LOW,
+      confidence: need.confidence,
+      skill: null,
+      candidates: [],
+      message: '置信度不足，跳过自动发现'
+    };
+  }
+
+  // 2. 搜索
+  const searchResult = await searchSkills(need.query);
+  if (!searchResult.success) return searchResult;
+
+  // 3. 筛选
+  const selectResult = filterAndSelect(searchResult.results);
+  if (!selectResult.success) return selectResult;
+
+  // 4. 安装
+  return resolveInstall(selectResult.best, dryRun);
+}
+
 // ==================== 导出 ====================
 module.exports = {
+  // 公共 API
   analyzeNeed,
   validateSkill,
   validateParams,
   selectBest,
-  skillsFindCached,
   autoDiscover,
+  searchSkills,
+  filterAndSelect,
+  resolveInstall,
+  // 内部工具（供 openclaw-hook 使用）
   buildLogEntry,
-  LOG_SCHEMA,
   sanitize,
-  CONFIG,
-  MAGIC
+  LOG_SCHEMA,
+  skillsFindCached,
+  CONFIG
 };

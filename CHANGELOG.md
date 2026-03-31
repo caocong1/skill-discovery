@@ -1,31 +1,53 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+本项目的所有重要变更都会记录在此文件中。
+
+## [2.0.0] - 2026-03-31
+
+基于 GPT、Opus、GLM、Kimi、MiniMax、Qwen 六份独立评审结果的全面重构。
+
+### 重构
+
+- **常量统一**: 新建 `constants.js`，消除 MAGIC/CONFIG 跨文件重复定义
+- **错误码标准化**: 新增 `ERROR_CODES` 枚举（11 种错误类型），所有返回结构统一为 `{ success, stage, outcome, errorCode, skill, candidates, message }`
+- **sanitize() 修正**: 重命名 `SANITIZE_SAFE_FIELDS` → `SANITIZE_REDACT_KEY_PATTERNS`，业务字段（installs/confidence/domain）不再被误脱敏
+- **autoDiscover 拆分**: 从单一大函数拆为 `searchSkills()` → `filterAndSelect()` → `resolveInstall()` 管道
+- **导出清理**: 收紧公共 API，内部工具函数不再暴露
+
+### 增强
+
+- **parseFindOutput() 强化**: JSON 优先解析 + 文本降级，双正则模式（支持 emoji 前缀），新增 M 后缀支持
+- **CLI 正式化**: 支持 `--dry-run`、`--json`、`--verbose`、`--help` 参数
+- **ESLint + Prettier**: 配置代码检查和格式化（ESLint v10 flat config）
+
+### 测试
+
+- 测试用例从 21 个增加到 **80 个**
+- 新增 `openclaw-hook.test.js`（onUserInput、generatePrompt、safeRemove、cleanTrash）
+- 补充 shellEscape、withRetry、extractJson、validateParams、buildLogEntry、sanitize 测试
+
+### 文档
+
+- README 和 SKILL.md 全部中文化
+- README 视角从"开发者"调整为"OpenClaw 用户"
+- 删除未实现功能的描述（config.js、pre-audit、ratings），移至"规划中"章节
+- 修正 cleanTrash 注释（"30 分钟" → "1 小时"）
+
+### 修复
+
+- `sanitize()` 不再遮蔽业务字段，日志恢复排查价值
+- OAUTH 正则从宽泛的 `===+.*===+` 改为精确的 `===+\s*[A-Za-z]+\s*===+`
 
 ## [1.0.0] - 2026-03-30
 
-### Added
-- Initial release
-- Automatic skill discovery based on user intent
-- Support for English and Chinese input
-- Quality validation (install counts, trusted sources)
-- Auto-install with whitelist support
-- Safety features: pre-audit, backup, logging
-- OpenClaw integration hook
-- CLI and programmatic API
-- Comprehensive test suite (32 tests)
+### 新增
 
-### Features
-- Intent analysis with confidence scoring
-- Domain detection (DevOps, Testing, Design, etc.)
-- Caching with TTL and size limits
-- Retry mechanism with exponential backoff
-- Sensitive data sanitization in logs
-- Trash backup with 7-day retention
-
-### Security
-- Pre-audit for dangerous patterns
-- Shell injection protection
-- Whitelist for trusted sources
-- Input validation
-- Log sanitization
+- 首次发布
+- 基于用户意图的自动 skill 发现
+- 中英文双语输入支持
+- 质量验证（安装量、可信来源）
+- 自动安装 + 白名单机制
+- 安全特性：Shell 转义、日志脱敏、卸载备份
+- OpenClaw 集成钩子
+- CLI 和编程 API
+- 单元测试和集成测试（21 个用例）

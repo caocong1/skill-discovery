@@ -5,32 +5,13 @@
  * Phase 3: 增强（C）- OpenClaw 集成
  */
 
-const os = require('os');
 const { autoDiscover, buildLogEntry, sanitize } = require('./auto-discover');
 const { skillsList, skillsRemove } = require('./skills-cli');
+const { MAGIC, HOOK_CONFIG } = require('./constants');
 const fs = require('fs').promises;
 const path = require('path');
 
-// ==================== 常量（消除魔法数字）====================
-const MAGIC = {
-  MAX_LOG_ENTRIES: 100,
-  TRASH_CLEAN_DAYS: 7,                  // 垃圾保留天数
-  TRASH_CLEAN_INTERVAL_MS: 60 * 60 * 1000,  // 清理间隔 1 小时（避免频繁扫描）
-  LOG_VERSION: '1.0'
-};
-
-// ==================== 配置 ====================
-const CONFIG = {
-  openclawDir: process.env.OPENCLAW_DIR || path.join(os.homedir(), '.openclaw'),
-  maxLogEntries: MAGIC.MAX_LOG_ENTRIES,
-  trashPath: process.env.TRASH_DIR || path.join(os.homedir(), '.openclaw', '.trash')
-};
-
-Object.defineProperty(CONFIG, 'logPath', {
-  get() {
-    return path.join(this.openclawDir, 'logs', 'skill-discovery-v3.json');
-  }
-});
+const CONFIG = HOOK_CONFIG;
 
 // ==================== 日志系统 ====================
 
@@ -72,9 +53,8 @@ async function safeRemove(skillRef) {
   try {
     // 1. 获取已安装列表
     const installed = await skillsList({ global: true });
-    const target = installed.find(s =>
-      s.name === skillRef ||
-      s.name === skillRef.replace(/[@/]/g, '-')
+    const target = installed.find(
+      (s) => s.name === skillRef || s.name === skillRef.replace(/[@/]/g, '-')
     );
 
     if (!target) {
@@ -125,12 +105,12 @@ const TRASH_CLEAN_INTERVAL_MS = MAGIC.TRASH_CLEAN_INTERVAL_MS;
 const SEVEN_DAYS_MS = MAGIC.TRASH_CLEAN_DAYS * 24 * 60 * 60 * 1000;
 
 /**
- * 清理过期备份（带缓存，30 分钟内不重复扫描）
+ * 清理过期备份（带缓存，1 小时内不重复扫描）
  */
 async function cleanTrash(options = {}) {
   const { force = false } = options;
 
-  // 缓存检查：30 分钟内不重复执行
+  // 缓存检查：1 小时内不重复执行
   if (!force && Date.now() - _lastCleanTime < TRASH_CLEAN_INTERVAL_MS) {
     return { ..._lastCleanResult, cached: true };
   }
@@ -172,7 +152,7 @@ async function cleanTrash(options = {}) {
  *
  * result.alreadyInstalled 独立于 handled 存在，表示 skill 已安装（无需再次安装）
  */
-async function onUserInput(userInput, context = {}) {
+async function onUserInput(userInput, _context = {}) {
   console.log(`[Skill Discovery] 处理输入: "${userInput.substring(0, 50)}..."`);
 
   // 1. 自动发现
@@ -237,9 +217,11 @@ async function onUserInput(userInput, context = {}) {
  */
 function generatePrompt(result) {
   if (result.success && result.installed) {
-    return `✅ 已自动安装 ${result.skill.fullName}\n` +
-           `📊 安装量: ${result.skill.installs.toLocaleString()}\n` +
-           `🔗 ${result.skill.url || 'https://skills.sh'}`;
+    return (
+      `✅ 已自动安装 ${result.skill.fullName}\n` +
+      `📊 安装量: ${result.skill.installs.toLocaleString()}\n` +
+      `🔗 ${result.skill.url || 'https://skills.sh'}`
+    );
   }
 
   if (result.success && result.alreadyInstalled) {

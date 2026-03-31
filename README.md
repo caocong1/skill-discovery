@@ -2,120 +2,137 @@
 
 [![License: MIT-0](https://img.shields.io/badge/License-MIT--0-blue.svg)](LICENSE)
 
-Automatically discover and install skills based on user intent.
+基于用户意图自动发现并安装 skills 的 OpenClaw 技能。当用户表达某类需求时，自动从 skills.sh 搜索、验证并安装最匹配的 skill。
 
-## Features
+## 安装
 
-- 🔍 **Intent Analysis** - Understands what the user wants to do
-- 🤖 **Auto Search** - Finds matching skills from skills.sh
-- ✅ **Quality Validation** - Checks install counts, ratings, source reputation
-- 📦 **Auto Install** - Installs the best matching skill automatically
-- 🛡️ **Safety First** - Pre-audit, whitelist, backup, logging
-- 🌐 **Multi-language** - Supports English and Chinese
+在 OpenClaw 中直接对话：
 
-## Quick Start
+```
+> 帮我安装这个 skill：https://github.com/caocong1/skill-discovery
+```
+
+或通过命令行：
 
 ```bash
-# Clone and enter directory
-cd ~/.openclaw/workspace/skill-discovery
-
-# Install dependencies (if any)
-npm install
-
-# Run in dry-run mode (test without installing)
-node index.js
-
-# Use in your code
-const { autoDiscover } = require('./index');
-const result = await autoDiscover('help me deploy to Vercel');
+npx skills add https://github.com/caocong1/skill-discovery -g
 ```
 
-## Usage
+## 它能做什么
 
-### Automatic Mode
+安装后，当你在 OpenClaw 中输入类似以下内容时，skill-discovery 会自动介入：
+
+```
+> 帮我部署到 Vercel
+✅ 已自动安装 vercel-labs/agent-skills@vercel-deploy
+📊 安装量: 262,000
+🔗 https://skills.sh/vercel-labs/agent-skills/vercel-deploy
+
+> 怎么写测试
+✅ 已自动安装 vercel-labs/agent-skills@testing-best-practices
+```
+
+**不会触发的情况：**
+- "今天天气怎么样" — 非技能需求
+- "什么是 React" — 知识类提问
+- "为什么报错" — 调试类问题
+
+## 工作原理
+
+1. **意图分析** — 通过触发词 + 领域关键词 + 置信度评分判断是否需要搜索 skill
+2. **搜索** — 调用 `npx skills find` 从 skills.sh 查找匹配结果（带 10 分钟缓存）
+3. **质量验证** — 安装量 >= 1000 且来源可信（vercel-labs、anthropics、openai 等）
+4. **自动安装** — 选择评分最高的 skill 并安装
+
+## 触发词
+
+| 语言 | 示例 |
+|------|------|
+| 中文 | "帮我..."、"怎么..."、"有什么工具..."、"推荐一个..."、"找个...工具" |
+| 英文 | "find a skill for..."、"help me with..."、"is there a skill that..."、"I need..." |
+
+## 覆盖领域
+
+DevOps、测试、设计、文档、代码质量、数据处理、图片处理、视频处理、性能优化、API/网络、数据库、AI/ML、安全、移动端、游戏
+
+## 安全机制
+
+- **Shell 转义** — CLI 参数转义防止命令注入
+- **日志脱敏** — token、密钥等敏感信息自动遮蔽
+- **卸载备份** — 卸载的 skill 备份到 `.trash/`，保留 7 天
+- **来源验证** — 校验 skill 来源是否在可信 owner 列表中
+
+## 编程接口
+
+如果需要在自己的代码中调用：
 
 ```javascript
-const { onUserInput } = require('./skill-discovery');
+const { autoDiscover, onUserInput } = require('skill-discovery');
 
-// Integrate into OpenClaw
-const result = await onUserInput('帮我优化 React 性能');
-// Automatically finds and installs react-best-practices skill
-```
+// 方式一：直接发现
+const result = await autoDiscover('帮我部署到 Vercel', { dryRun: true });
+// { success, stage, outcome, skill, message, ... }
 
-### Manual Mode
-
-```javascript
-const { autoDiscover } = require('./skill-discovery');
-
-const result = await autoDiscover('how do I write tests', { dryRun: true });
-console.log(result);
-```
-
-### CLI Mode
-
-```bash
-node index.js
-```
-
-## Configuration
-
-Create `config.json` in the skill directory:
-
-```json
-{
-  "autoInstall": false,
-  "requireApproval": true,
-  "minInstalls": 1000,
-  "confidenceThreshold": 0.6,
-  "trustedOwners": ["vercel-labs", "anthropics", "openai"]
+// 方式二：OpenClaw 钩子
+const hookResult = await onUserInput('写个测试');
+if (hookResult.handled) {
+  console.log(hookResult.response);
 }
 ```
 
-## Project Structure
+## 返回结构
 
-```
-skill-discovery/
-├── SKILL.md              # Skill definition for OpenClaw
-├── README.md             # This file
-├── package.json          # Package config
-├── config.js             # Default configuration
-├── skills-cli.js         # CLI wrapper for npx skills
-├── auto-discover.js      # Core discovery logic
-├── openclaw-hook.js      # OpenClaw integration
-├── index.js              # Main entry
-├── test/                 # Test files
-│   ├── unit/
-│   └── integration/
-└── docs/                 # Documentation
+```javascript
+{
+  success: boolean,
+  stage: 'analyze' | 'search' | 'select' | 'install',
+  outcome: 'installed' | 'already_installed' | 'dry_run' | 'skipped' | 'failed',
+  errorCode: string | null,
+  skill: object | null,
+  candidates: array,
+  message: string
+}
 ```
 
-## Testing
+## 规划中
+
+- 配置文件支持（`config.json` 用户级覆盖）
+- 交互式确认/审批流程（针对非可信来源）
+- 安装前内容预审扫描
+- Skill 评分集成
+- 用户反馈循环优化推荐
+
+---
+
+## 开发
+
+面向贡献者的信息：
 
 ```bash
-# Run all tests
-npm test
-
-# Run unit tests only
-npm run test:unit
-
-# Run with coverage
-npm run test:coverage
+npm install               # 安装依赖
+npm test                  # 运行全部测试（80 个用例）
+npm run test:unit         # 仅单元测试
+npm run test:coverage     # 含覆盖率
+npm run lint              # ESLint 检查
+node index.js --help      # CLI 模式帮助
 ```
 
-## Contributing
+### 项目结构
 
-1. Fork the repository
-2. Create your feature branch
-3. Add tests for new features
-4. Ensure all tests pass
-5. Submit a pull request
+```
+constants.js          # 统一常量（MAGIC、CONFIG、ERROR_CODES）
+skills-cli.js         # npx skills CLI 封装（Phase 1）
+auto-discover.js      # 核心发现逻辑（Phase 2）
+openclaw-hook.js      # OpenClaw 集成（Phase 3）
+index.js              # 主入口 + CLI
+```
 
-## License
+## 依赖
 
-MIT-0 - See [LICENSE](LICENSE) for details.
+- Node.js >= 18
+- `npx skills` CLI（来自 skills.sh）
+- OpenClaw（可选，用于钩子集成）
 
-## Related
+## 许可证
 
-- [skills.sh](https://skills.sh) - Skill registry
-- [OpenClaw](https://openclaw.ai) - Agent framework
-- [ClawHub](https://clawhub.ai) - Skill directory
+MIT-0

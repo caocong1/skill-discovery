@@ -7,31 +7,31 @@ const { skillsList, skillsFind, parseFindOutput } = require('./skills-cli');
 
 async function main() {
   console.log('=== Skills CLI Wrapper 测试 ===\n');
-  
+
   // 测试 1: list
   console.log('1. 测试 skillsList()');
   console.log('-'.repeat(50));
   try {
     const installed = await skillsList({ global: true });
     console.log(`✅ 找到 ${installed.length} 个已安装 skill:`);
-    installed.forEach(s => console.log(`   - ${s.name}`));
+    installed.forEach((s) => console.log(`   - ${s.name}`));
   } catch (e) {
     console.error('❌ 失败:', e.message);
   }
-  
+
   // 测试 2: find
   console.log('\n2. 测试 skillsFind("react")');
   console.log('-'.repeat(50));
   try {
     const results = await skillsFind('react');
     console.log(`✅ 找到 ${results.length} 个结果:`);
-    results.slice(0, 3).forEach(r => {
+    results.slice(0, 3).forEach((r) => {
       console.log(`   - ${r.fullName} (${r.installs} installs)`);
     });
   } catch (e) {
     console.error('❌ 失败:', e.message);
   }
-  
+
   // 测试 3: parseFindOutput
   console.log('\n3. 测试 parseFindOutput()');
   console.log('-'.repeat(50));
@@ -42,7 +42,7 @@ async function main() {
 `;
   const parsed = parseFindOutput(sampleOutput);
   console.log(`✅ 解析 ${parsed.length} 条:`);
-  parsed.forEach(p => console.log(`   - ${p.fullName}: ${p.installs}`));
+  parsed.forEach((p) => console.log(`   - ${p.fullName}: ${p.installs}`));
 }
 
 main().catch(console.error);

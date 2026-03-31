@@ -7,15 +7,11 @@
 
 const { exec } = require('child_process');
 const util = require('util');
+const { CLI_CONFIG } = require('./constants');
 
 const execAsync = util.promisify(exec);
 
-// ==================== 配置 ====================
-const CONFIG = {
-  maxRetries: 3,
-  retryDelay: 1000,  // 初始重试延迟（毫秒）
-  timeout: 60000     // 命令超时时间
-};
+const CONFIG = CLI_CONFIG;
 
 // ==================== 安全工具 ====================
 
@@ -63,7 +59,7 @@ async function withRetry(fn, options = {}) {
 }
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ==================== 核心命令封装 ====================
@@ -99,6 +95,7 @@ async function skillsList(options = {}) {
 
 /**
  * 搜索 skills
+ * 优先尝试 --json 获取结构化输出，降级为文本解析
  * @param {string} query - 搜索关键词
  * @returns {Promise<Array>} 搜索结果
  */
@@ -108,9 +105,21 @@ async function skillsFind(query) {
     return [];
   }
 
-  const cmd = `npx skills find ${shellEscape(query)}`;
-
   return withRetry(async () => {
+    // 优先尝试 JSON 输出
+    try {
+      const jsonCmd = `npx skills find ${shellEscape(query)} --json`;
+      const { stdout } = await execAsync(jsonCmd, { timeout: CONFIG.timeout });
+      const parsed = JSON.parse(stdout);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    } catch {
+      // --json 不支持或解析失败，降级为文本解析
+    }
+
+    // 降级：文本输出 + 正则解析
+    const cmd = `npx skills find ${shellEscape(query)}`;
     const { stdout } = await execAsync(cmd, { timeout: CONFIG.timeout });
     return parseFindOutput(stdout);
   });
@@ -146,31 +155,38 @@ function extractJson(text) {
 
 /**
  * 解析 npx skills find 的输出
+ *
+ * 使用多个正则模式提升容错性：
+ * - 主模式: owner/repo@skill  N installs
+ * - 备用模式: 更宽松，允许额外前缀（emoji等）
+ *
  * @param {string} output - ANSI 文本输出
- * @returns {Array} 解析后的结果
+ * @returns {Array} 解析后的结果（空数组 + console.warn 表示解析失败）
  */
 function parseFindOutput(output) {
+  if (!output || typeof output !== 'string') {
+    return [];
+  }
+
   const results = [];
   const lines = output.split('\n').map(stripAnsi);
 
-  // 正则匹配: owner/repo@skill installs
-  // 示例: vercel-labs/json-render@react 728 installs
-  // 示例: vercel-labs/json-render@react 75.5K installs  <-- 带小数
-  // 匹配 \d+(?:\.\d+)?[K]? 表示支持无后缀、纯小数、K 后缀小数
-  const skillPattern = /^(.+?)\/(.+?)@(.+?)\s+([\d.]+[K]?)\s+installs/i;
+  // 主模式: 行首 owner（字母数字开头）/repo@skill
+  const primaryPattern = /^([a-zA-Z0-9][\w-]*)\/(\S+?)@(\S+?)\s+([\d.]+[KkMm]?)\s+installs/i;
+  // 备用模式: 允许行首有额外字符（emoji、序号等），owner 必须以字母数字开头
+  const fallbackPattern = /([a-zA-Z0-9][\w-]*?)\/(\S+?)@(\S+?)\s+([\d.]+[KkMm]?)\s+installs/i;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    const match = line.match(skillPattern);
+    const match = line.match(primaryPattern) || line.match(fallbackPattern);
 
     if (match) {
       const [_, owner, repo, skill, installsStr] = match;
 
-      // 解析安装数（处理 K 后缀，支持小数）
-      let installs = parseFloat(installsStr.replace('K', ''));
-      if (installsStr.includes('K')) {
-        installs *= 1000;
-      }
+      // 解析安装数（处理 K/M 后缀，支持小数）
+      let installs = parseFloat(installsStr.replace(/[KkMm]/g, ''));
+      if (/[Kk]/.test(installsStr)) installs *= 1000;
+      if (/[Mm]/.test(installsStr)) installs *= 1000000;
 
       // 下一行通常是 URL
       const urlLine = lines[i + 1] || '';
@@ -186,6 +202,11 @@ function parseFindOutput(output) {
         source: 'skills.sh'
       });
     }
+  }
+
+  // 有内容但解析为空 → 可能格式已变化，输出警告
+  if (results.length === 0 && output.trim().length > 0) {
+    console.warn('[parseFindOutput] 解析结果为空，CLI 输出格式可能已变化');
   }
 
   return results;
@@ -211,7 +232,7 @@ async function skillsAdd(skillRef, options = {}) {
 
   return withRetry(async () => {
     const { stdout, stderr } = await execAsync(cmd, {
-      timeout: CONFIG.timeout * 2  // 安装可能较慢
+      timeout: CONFIG.timeout * 2 // 安装可能较慢
     });
 
     return {
