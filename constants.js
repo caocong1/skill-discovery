@@ -13,7 +13,6 @@ const path = require('path');
 const MAGIC = {
   // 置信度与评分
   CONFIDENCE_THRESHOLD: 0.6,
-  MIN_INSTALLS: 1000,
   QUERY_MAX_LENGTH: 50,
   WEIGHT_EXPLICIT: 1.0,
   WEIGHT_HIGH: 0.9,
@@ -23,11 +22,8 @@ const MAGIC = {
   NEGATIVE_MULTIPLIER: 0.5,
   DOMAIN_MIN_CONFIDENCE: 0.8,
   INSTALLS_SCORE_FACTOR: 10,
-  INSTALLS_SCORE_MAX: 40,
   TRUSTED_SCORE: 30,
   UNTRUSTED_SCORE: 10,
-  HIGH_RISK_MULTIPLIER: 0.3,
-  MEDIUM_RISK_MULTIPLIER: 0.7,
   MIN_INSTALLS_SCALE: 10000,
 
   // 缓存
@@ -64,7 +60,6 @@ const ERROR_CODES = {
   SEARCH_FAILED: 'SEARCH_FAILED',
   NO_RESULTS: 'NO_RESULTS',
   // 筛选阶段
-  NO_VALID_RESULTS: 'NO_VALID_RESULTS',
   // 安装阶段
   ALREADY_INSTALLED: 'ALREADY_INSTALLED',
   INSTALL_FAILED: 'INSTALL_FAILED',
@@ -89,12 +84,19 @@ const CLI_CONFIG = {
 // ==================== 发现引擎配置 ====================
 const DISCOVER_CONFIG = {
   confidenceThreshold: MAGIC.CONFIDENCE_THRESHOLD,
-  minInstalls: MAGIC.MIN_INSTALLS,
-  trustedOwners: ['vercel-labs', 'anthropics', 'google-labs-code', 'microsoft', 'openai'],
+  trustedOwners: ['vercel-labs', 'anthropics', 'google-labs-code', 'microsoft', 'openai', 'openclaw'],
   cache: {
     ttl: MAGIC.CACHE_TTL_MS,
     maxSize: MAGIC.CACHE_MAX_SIZE
   }
+};
+
+// ==================== ClawHub 配置 ====================
+const CLAWHUB_CONFIG = {
+  apiBase: 'https://clawhub.ai',
+  searchEndpoint: '/api/v1/search',
+  timeout: 10000,
+  maxResults: 10
 };
 
 // ==================== OpenClaw Hook 配置 ====================
@@ -117,5 +119,6 @@ module.exports = {
   LOG_SCHEMA,
   CLI_CONFIG,
   DISCOVER_CONFIG,
+  CLAWHUB_CONFIG,
   HOOK_CONFIG
 };

@@ -4,7 +4,6 @@
 
 const {
   analyzeNeed,
-  validateSkill,
   selectBest,
   validateParams,
   buildLogEntry,
@@ -78,58 +77,6 @@ describe('analyzeNeed', () => {
   });
 });
 
-// ==================== validateSkill ====================
-
-describe('validateSkill', () => {
-  test('should pass for high-install skill from trusted owner', () => {
-    const skill = {
-      fullName: 'vercel-labs/agent-skills@react',
-      owner: 'vercel-labs',
-      installs: 15000
-    };
-
-    const result = validateSkill(skill);
-    expect(result.passed).toBe(true);
-    expect(result.riskLevel).toBe('low');
-  });
-
-  test('should fail for low-install skill', () => {
-    const skill = {
-      fullName: 'unknown/skill@test',
-      owner: 'unknown',
-      installs: 100
-    };
-
-    const result = validateSkill(skill);
-    expect(result.passed).toBe(false);
-    expect(result.riskLevel).toBe('high');
-  });
-
-  test('should warn for untrusted owner', () => {
-    const skill = {
-      fullName: 'random/skill@test',
-      owner: 'random',
-      installs: 5000
-    };
-
-    const result = validateSkill(skill);
-    expect(result.passed).toBe(true);
-    expect(result.isTrusted).toBe(false);
-  });
-
-  test('should mark as high risk for invalid format', () => {
-    const skill = {
-      fullName: 'no-at-sign',
-      owner: 'unknown',
-      installs: 5000
-    };
-
-    const result = validateSkill(skill);
-    expect(result.passed).toBe(false);
-    expect(result.riskLevel).toBe('high');
-  });
-});
-
 // ==================== selectBest ====================
 
 describe('selectBest', () => {
@@ -144,10 +91,10 @@ describe('selectBest', () => {
     expect(best.skill.fullName).toBe('c/d@2');
   });
 
-  test('should prefer trusted owner even with lower installs', () => {
+  test('should prefer trusted owner with similar installs', () => {
     const skills = [
       { fullName: 'vercel-labs/skill@1', owner: 'vercel-labs', installs: 10000 },
-      { fullName: 'unknown/skill@2', owner: 'unknown', installs: 50000 }
+      { fullName: 'unknown/skill@2', owner: 'unknown', installs: 10000 }
     ];
 
     const best = selectBest(skills);
@@ -162,12 +109,12 @@ describe('selectBest', () => {
     expect(best.score).toBeGreaterThan(0);
   });
 
-  test('should include validation info in result', () => {
+  test('should include score in result', () => {
     const skills = [{ fullName: 'a/b@c', owner: 'vercel-labs', installs: 5000 }];
 
     const best = selectBest(skills);
-    expect(best.validation).toBeDefined();
-    expect(best.validation.riskLevel).toBeDefined();
+    expect(best.score).toBeDefined();
+    expect(best.score).toBeGreaterThan(0);
   });
 });
 

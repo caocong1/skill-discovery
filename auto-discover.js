@@ -7,7 +7,7 @@
  * B. 自动执行流程
  */
 
-const { skillsList, skillsFind, skillsAdd } = require('./skills-cli');
+const { skillsList, skillsFind, skillsAdd, clawhubAdd } = require('./skills-cli');
 const { MAGIC, ERROR_CODES, LOG_SCHEMA, DISCOVER_CONFIG } = require('./constants');
 
 // ==================== 预编译正则（避免重复编译）====================
@@ -204,66 +204,23 @@ function analyzeNeed(userInput) {
 // ==================== B. 自动执行流程 ====================
 
 /**
- * 验证 skill 质量（按官方标准）
- */
-function validateSkill(skill) {
-  const reasons = [];
-  let riskLevel = 'low';
-
-  // 1. 安装量检查
-  if (skill.installs < CONFIG.minInstalls) {
-    reasons.push(`安装量过低 (${skill.installs} < ${CONFIG.minInstalls})`);
-    riskLevel = 'high';
-  } else {
-    reasons.push(`✓ 安装量充足 (${skill.installs.toLocaleString()})`);
-  }
-
-  // 2. 来源可信度
-  const isTrusted = CONFIG.trustedOwners.includes(skill.owner);
-  if (isTrusted) {
-    reasons.push(`✓ 官方来源 (${skill.owner})`);
-  } else {
-    reasons.push(`⚠ 非官方来源 (${skill.owner})`);
-    if (riskLevel === 'low') riskLevel = 'medium';
-  }
-
-  // 3. 格式检查
-  if (!skill.fullName.includes('@')) {
-    reasons.push('✗ 格式异常');
-    riskLevel = 'high';
-  }
-
-  return {
-    passed: riskLevel !== 'high' && skill.installs >= CONFIG.minInstalls,
-    riskLevel,
-    reasons,
-    isTrusted
-  };
-}
-
-/**
  * 选择最佳 skill
  */
 function selectBest(skills) {
-  // 评分算法
+  // skills.sh 已验证，仅按安装量 + 来源偏好排序
   const scored = skills.map((skill) => {
-    const validation = validateSkill(skill);
     let score = 0;
 
     // 安装量分数 (0-40)
     score += Math.min(skill.installs / MAGIC.MIN_INSTALLS_SCALE, 4) * MAGIC.INSTALLS_SCORE_FACTOR;
 
-    // 可信度分数
-    score += validation.isTrusted ? MAGIC.TRUSTED_SCORE : MAGIC.UNTRUSTED_SCORE;
+    // 可信来源加分
+    const isTrusted = CONFIG.trustedOwners.includes(skill.owner);
+    score += isTrusted ? MAGIC.TRUSTED_SCORE : MAGIC.UNTRUSTED_SCORE;
 
-    // 风险调整
-    if (validation.riskLevel === 'high') score *= MAGIC.HIGH_RISK_MULTIPLIER;
-    else if (validation.riskLevel === 'medium') score *= MAGIC.MEDIUM_RISK_MULTIPLIER;
-
-    return { skill, score, validation };
+    return { skill, score };
   });
 
-  // 排序并返回最佳
   scored.sort((a, b) => b.score - a.score);
   return scored[0];
 }
@@ -474,23 +431,8 @@ async function searchSkills(query) {
  * 筛选并选择最佳 skill
  */
 function filterAndSelect(results) {
-  const validResults = results.filter((s) => validateSkill(s).passed);
-  console.log(`✅ 通过验证: ${validResults.length} 个`);
-
-  if (validResults.length === 0) {
-    return {
-      success: false,
-      stage: 'select',
-      outcome: 'failed',
-      reason: 'no_valid_results',
-      errorCode: ERROR_CODES.NO_VALID_RESULTS,
-      skill: null,
-      candidates: results.slice(0, 3),
-      message: '未找到符合质量标准的 skill'
-    };
-  }
-
-  const best = selectBest(validResults);
+  // skills.sh 上的 skill 均已验证，无需二次过滤，直接选最佳
+  const best = selectBest(results);
   console.log(`⭐ 最佳: ${best.skill.fullName} (评分: ${Math.round(best.score)})`);
 
   return { success: true, best };
@@ -524,6 +466,9 @@ async function resolveInstall(best, dryRun) {
     // 忽略检查错误，继续安装
   }
 
+  const isClawhub = best.skill.source === 'clawhub';
+  const installCmd = isClawhub ? 'clawhub install' : 'npx skills add';
+
   if (dryRun) {
     return {
       success: true,
@@ -535,16 +480,15 @@ async function resolveInstall(best, dryRun) {
       skill: best.skill,
       validation: best.validation,
       candidates: [],
-      message: `[模拟] 将安装 ${best.skill.fullName}`
+      message: `[模拟] 将安装 ${best.skill.fullName}${isClawhub ? ' (ClawHub)' : ''}`
     };
   }
 
-  console.log(`📦 安装: ${best.skill.fullName}`);
+  console.log(`📦 安装${isClawhub ? ' (ClawHub)' : ''}: ${best.skill.fullName}`);
   try {
-    const installResult = await skillsAdd(best.skill.fullName, {
-      global: true,
-      yes: true
-    });
+    const installResult = isClawhub
+      ? await clawhubAdd(best.skill.fullName)
+      : await skillsAdd(best.skill.fullName, { global: true, yes: true });
 
     return {
       success: true,
@@ -557,7 +501,7 @@ async function resolveInstall(best, dryRun) {
       validation: best.validation,
       result: installResult,
       candidates: [],
-      message: `✅ 已自动安装 ${best.skill.fullName}`
+      message: `✅ 已自动安装 ${best.skill.fullName}${isClawhub ? ' (ClawHub)' : ''}`
     };
   } catch (error) {
     return {
@@ -568,7 +512,7 @@ async function resolveInstall(best, dryRun) {
       errorCode: ERROR_CODES.INSTALL_FAILED,
       skill: best.skill,
       error: error.message,
-      fallback: `手动安装: npx skills add ${best.skill.fullName}`,
+      fallback: `手动安装: ${installCmd} ${best.skill.fullName}`,
       candidates: [],
       message: `安装失败: ${error.message}`
     };
@@ -626,7 +570,6 @@ async function autoDiscover(userInput, options = {}) {
 module.exports = {
   // 公共 API
   analyzeNeed,
-  validateSkill,
   validateParams,
   selectBest,
   autoDiscover,

@@ -6,8 +6,9 @@
  */
 
 const { exec } = require('child_process');
+const https = require('https');
 const util = require('util');
-const { CLI_CONFIG } = require('./constants');
+const { CLI_CONFIG, CLAWHUB_CONFIG } = require('./constants');
 
 const execAsync = util.promisify(exec);
 
@@ -94,12 +95,12 @@ async function skillsList(options = {}) {
 }
 
 /**
- * 搜索 skills
+ * 搜索 skills (skills.sh CLI)
  * 优先尝试 --json 获取结构化输出，降级为文本解析
  * @param {string} query - 搜索关键词
  * @returns {Promise<Array>} 搜索结果
  */
-async function skillsFind(query) {
+async function skillsFindCli(query) {
   // 参数校验
   if (typeof query !== 'string' || query.trim().length === 0) {
     return [];
@@ -123,6 +124,144 @@ async function skillsFind(query) {
     const { stdout } = await execAsync(cmd, { timeout: CONFIG.timeout });
     return parseFindOutput(stdout);
   });
+}
+
+// ==================== ClawHub 搜索 ====================
+
+/**
+ * HTTPS GET 请求
+ * @param {string} url - 请求地址
+ * @param {number} timeout - 超时时间（毫秒）
+ * @returns {Promise<Object>} JSON 响应
+ */
+function httpsGet(url, timeout) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { timeout }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(new Error(`JSON parse failed: ${e.message}`));
+          }
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timed out'));
+    });
+  });
+}
+
+/**
+ * 搜索 ClawHub 注册表
+ * @param {string} query - 搜索关键词
+ * @returns {Promise<Array>} 标准化搜索结果
+ */
+async function clawhubSearch(query) {
+  if (typeof query !== 'string' || query.trim().length === 0) {
+    return [];
+  }
+
+  const url = `${CLAWHUB_CONFIG.apiBase}${CLAWHUB_CONFIG.searchEndpoint}?q=${encodeURIComponent(query)}&limit=${CLAWHUB_CONFIG.maxResults}`;
+
+  try {
+    const data = await httpsGet(url, CLAWHUB_CONFIG.timeout);
+
+    if (!data.results || !Array.isArray(data.results)) {
+      return [];
+    }
+
+    return data.results.map((r) => ({
+      fullName: r.slug,
+      owner: r.slug,
+      repo: null,
+      skill: r.slug,
+      installs: 0,
+      displayName: r.displayName || r.slug,
+      summary: r.summary || null,
+      version: r.version || null,
+      url: `${CLAWHUB_CONFIG.apiBase}/skills/${r.slug}`,
+      source: 'clawhub',
+      score: r.score || 0
+    }));
+  } catch (error) {
+    console.warn(`[clawhubSearch] ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * 安装 ClawHub skill
+ * @param {string} slug - skill slug
+ * @returns {Promise<Object>} 安装结果
+ */
+async function clawhubAdd(slug) {
+  if (typeof slug !== 'string' || slug.trim().length === 0) {
+    throw new Error('slug 参数无效：必须是非空字符串');
+  }
+
+  const cmd = `clawhub install ${shellEscape(slug)}`;
+
+  return withRetry(async () => {
+    const { stdout, stderr } = await execAsync(cmd, {
+      timeout: CONFIG.timeout * 2
+    });
+
+    return {
+      success: true,
+      skillRef: slug,
+      output: stdout,
+      warnings: stderr || null
+    };
+  });
+}
+
+/**
+ * 合并去重搜索结果，skills.sh 优先
+ * @param {Array} results - 混合来源的搜索结果
+ * @returns {Array} 去重后的结果
+ */
+function deduplicateResults(results) {
+  const seen = new Map();
+  for (const result of results) {
+    const key = (result.skill || result.fullName).toLowerCase();
+    if (!seen.has(key) || (result.source === 'skills.sh' && seen.get(key).source !== 'skills.sh')) {
+      seen.set(key, result);
+    }
+  }
+  return Array.from(seen.values());
+}
+
+/**
+ * 搜索 skills（合并 skills.sh + ClawHub）
+ * @param {string} query - 搜索关键词
+ * @returns {Promise<Array>} 合并去重后的搜索结果
+ */
+async function skillsFind(query) {
+  if (typeof query !== 'string' || query.trim().length === 0) {
+    return [];
+  }
+
+  const [cliResult, clawhubResult] = await Promise.allSettled([
+    skillsFindCli(query),
+    clawhubSearch(query)
+  ]);
+
+  const results = [
+    ...(cliResult.status === 'fulfilled' ? cliResult.value : []),
+    ...(clawhubResult.status === 'fulfilled' ? clawhubResult.value : [])
+  ];
+
+  return deduplicateResults(results);
 }
 
 /**
@@ -290,14 +429,18 @@ async function skillsUpdate() {
 module.exports = {
   skillsList,
   skillsFind,
+  skillsFindCli,
   skillsAdd,
   skillsRemove,
   skillsCheck,
   skillsUpdate,
+  clawhubSearch,
+  clawhubAdd,
   parseFindOutput,
   extractJson,
   shellEscape,
   withRetry,
+  deduplicateResults,
   CONFIG,
   stripAnsi
 };

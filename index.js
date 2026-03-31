@@ -10,7 +10,7 @@
 
 const { skillsList, skillsFind, skillsAdd, skillsRemove } = require('./skills-cli');
 
-const { analyzeNeed, validateSkill, autoDiscover } = require('./auto-discover');
+const { analyzeNeed, autoDiscover } = require('./auto-discover');
 
 const { onUserInput, generatePrompt, safeRemove, cleanTrash } = require('./openclaw-hook');
 
@@ -39,7 +39,6 @@ module.exports = {
 
   // Phase 2: 自动化
   analyzeNeed,
-  validateSkill,
   autoDiscover,
   discoverAndInstall,
 

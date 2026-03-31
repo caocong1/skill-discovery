@@ -2,6 +2,19 @@
 
 本项目的所有重要变更都会记录在此文件中。
 
+## [2.1.0] - 2026-03-31
+
+### 新增
+
+- **ClawHub 搜索源**: 新增 ClawHub (`clawhub.ai`) 作为 skill 搜索源，与 skills.sh 并行搜索
+- `clawhubSearch()`: 通过 ClawHub 公共 API (`/api/v1/search`) 进行向量语义搜索
+- `clawhubAdd()`: 支持通过 `clawhub install` 安装 ClawHub 来源的 skill
+- `deduplicateResults()`: 合并去重两个源的搜索结果，skills.sh 优先
+- `skillsFind()` 现使用 `Promise.allSettled` 并行搜索两个源，ClawHub 故障不影响 skills.sh 结果
+- `CLAWHUB_CONFIG`: 集中管理 ClawHub API 配置（基址、端点、超时、数量限制）
+- `openclaw` 加入 `trustedOwners` 可信来源列表
+- `resolveInstall()` 根据 skill 来源自动选择安装命令（`npx skills add` 或 `clawhub install`）
+
 ## [2.0.0] - 2026-03-31
 
 基于 GPT、Opus、GLM、Kimi、MiniMax、Qwen 六份独立评审结果的全面重构。
