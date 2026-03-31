@@ -171,7 +171,7 @@ async function clawhubSearch(query) {
     return [];
   }
 
-  const url = `${CLAWHUB_CONFIG.apiBase}${CLAWHUB_CONFIG.searchEndpoint}?q=${encodeURIComponent(query)}&limit=${CLAWHUB_CONFIG.maxResults}`;
+  const url = `${CLAWHUB_CONFIG.apiBase}${CLAWHUB_CONFIG.searchEndpoint}?q=${encodeURIComponent(query)}&limit=${CLAWHUB_CONFIG.maxResults}&nonSuspiciousOnly=true`;
 
   try {
     const data = await httpsGet(url, CLAWHUB_CONFIG.timeout);

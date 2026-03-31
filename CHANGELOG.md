@@ -2,6 +2,12 @@
 
 本项目的所有重要变更都会记录在此文件中。
 
+## [2.1.2] - 2026-03-31
+
+### 增强
+
+- ClawHub 搜索自动过滤被安全标记（flagged/suspicious）的 skill（`nonSuspiciousOnly=true`）
+
 ## [2.1.1] - 2026-03-31
 
 ### 修复
