@@ -363,7 +363,7 @@ async function skillsAdd(skillRef, options = {}) {
     throw new Error('skillRef 参数无效：必须是非空字符串');
   }
 
-  const { global = true, yes = true } = options;
+  const { global = false, yes = false } = options;
 
   let cmd = `npx skills add ${shellEscape(skillRef)}`;
   if (global) cmd += ' -g';

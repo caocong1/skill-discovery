@@ -532,7 +532,7 @@ async function autoDiscover(userInput, options = {}) {
     throw new Error(`参数校验失败: ${validationErrors.join('; ')}`);
   }
 
-  const { dryRun = false } = options;
+  const { dryRun = true } = options;
 
   console.log(`🔍 分析: "${userInput.substring(0, 50)}..."`);
 

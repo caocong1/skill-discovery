@@ -155,8 +155,8 @@ async function cleanTrash(options = {}) {
 async function onUserInput(userInput, _context = {}) {
   console.log(`[Skill Discovery] 处理输入: "${userInput.substring(0, 50)}..."`);
 
-  // 1. 自动发现
-  const result = await autoDiscover(userInput, { dryRun: false });
+  // 1. 自动发现（默认推荐模式，不自动安装）
+  const result = await autoDiscover(userInput, { dryRun: true });
 
   // 2. 记录日志
   await logDiscovery(result.installed ? 'install' : 'discover', {
@@ -164,12 +164,27 @@ async function onUserInput(userInput, _context = {}) {
     ...result
   });
 
-  // 3. 返回处理建议（语义清晰）
+  // 3. 返回处理建议（推荐模式：不自动安装，返回建议供用户确认）
+  if (result.success && result.dryRun) {
+    // 推荐模式 -> 未接管，返回推荐信息供用户确认
+    const isClawhub = result.skill.source === 'clawhub';
+    const installCmd = isClawhub
+      ? `clawhub install ${result.skill.fullName}`
+      : `npx skills add ${result.skill.fullName} -g`;
+    return {
+      handled: false,
+      note: `💡 发现匹配 skill: ${result.skill.fullName}\n安装命令: ${installCmd}`,
+      skill: result.skill,
+      installCmd,
+      alreadyInstalled: false
+    };
+  }
+
   if (result.success && result.installed) {
-    // 成功安装 -> 已接管
+    // 显式安装成功 -> 已接管
     return {
       handled: true,
-      response: `✅ 已自动安装 ${result.skill.fullName}\n\n现在可以使用相关功能了。`,
+      response: `✅ 已安装 ${result.skill.fullName}\n\n现在可以使用相关功能了。`,
       skill: result.skill,
       alreadyInstalled: false
     };
