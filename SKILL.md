@@ -3,6 +3,9 @@ name: skill-discovery
 description: 基于用户意图发现并推荐 skill。分析用户输入，搜索匹配 skill，验证质量后推荐最佳匹配，由用户确认后安装。
 metadata:
   openclaw:
+    install:
+      type: bundled
+      entrypoint: index.js
     requires:
       bins:
         - npx
@@ -70,7 +73,7 @@ metadata:
 
 - **推荐模式默认**: 默认 dry-run，不自动安装，需用户确认
 - **Shell 转义**: 所有 CLI 参数转义防止命令注入
-- **日志脱敏**: 敏感数据（token、密钥）在日志中自动遮蔽
+- **日志脱敏**: `sanitize()` 递归遮蔽敏感字段（字段名匹配 `token/secret/password/api_key/credential/authorization`）和敏感值（`Bearer`/`sk-`/`ghp_` 等模式），业务字段（installs/confidence/domain）保持原值。日志写入 `$OPENCLAW_DIR/logs/skill-discovery-v3.json`，可通过 `OPENCLAW_DIR` 环境变量自定义路径
 - **卸载备份**: 卸载的 skill 备份到 `.trash/`，保留 7 天
 - **来源验证**: 校验 skill 来源是否在可信 owner 列表中
 

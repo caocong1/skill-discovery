@@ -2,6 +2,13 @@
 
 本项目的所有重要变更都会记录在此文件中。
 
+## [2.2.1] - 2026-03-31
+
+### 增强
+
+- SKILL.md 声明 `install.type: bundled` + `entrypoint: index.js`，消除 OpenClaw "No install spec declared" 提示
+- SKILL.md 补充 `sanitize()` 脱敏策略文档（遮蔽字段名/值模式、日志路径），消除 OpenClaw 截断审查提示
+
 ## [2.2.0] - 2026-03-31
 
 ### 安全增强（解决 OpenClaw Suspicious 标记）

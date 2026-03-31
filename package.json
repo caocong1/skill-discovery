@@ -1,6 +1,6 @@
 {
   "name": "skill-discovery",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Automatically discover and install skills based on user intent",
   "main": "index.js",
   "bin": {
